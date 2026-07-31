@@ -214,39 +214,122 @@ function Metric({ n, label, tone }: { n: number; label: string; tone: string }) 
 
 /* -------------------------------------------------------- fluxo (kanban) */
 
+/** Espaçamento usado ao mandar um card para o topo ou o fim de uma coluna. */
+const POSITION_STEP = 1000;
+/** Abaixo disto o ponto médio deixa de separar os vizinhos: hora de normalizar. */
+const MIN_GAP = 0.000001;
+
+/** Ordem de fila da coluna: posição, com a data como desempate estável. */
+function byQueue(a: Content, b: Content) {
+  return a.position - b.position || a.publishDate.localeCompare(b.publishDate) || a.id.localeCompare(b.id);
+}
+
 export function Board(props: ViewProps) {
   const { ws, onOpen, onPatch, onCreate, search, selection, toggleSelect } = props;
   const tax = useTaxonomy(ws);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
+  /** Onde a linha de encaixe aparece: antes de `beforeId`, ou no fim da coluna. */
+  const [target, setTarget] = useState<{ stageId: string; beforeId: string | null } | null>(null);
+  const [reordering, setReordering] = useState(false);
   const items = filterContents(ws, search);
 
+  /** Lista completa da etapa, sem o filtro de busca — é ela que define os vizinhos. */
+  const queueOf = (stageId: string) => ws.contents.filter((c) => c.stageId === stageId).sort(byQueue);
+
+  const clearDrag = () => { setDragId(null); setOverStage(null); setTarget(null); };
+
   const drop = async (stageId: string) => {
-    setOverStage(null);
     const id = dragId;
-    setDragId(null);
-    if (!id) return;
-    const current = ws.contents.find((c) => c.id === id);
-    if (!current || current.stageId === stageId) return;
-    await onPatch(id, { stageId });
+    const beforeId = target?.stageId === stageId ? target.beforeId : null;
+    clearDrag();
+    if (!id || beforeId === id) return;
+
+    const dragged = ws.contents.find((c) => c.id === id);
+    if (!dragged) return;
+
+    // Vizinhos calculados sobre a fila real, sem o card arrastado.
+    const queue = queueOf(stageId).filter((c) => c.id !== id);
+    const index = beforeId ? queue.findIndex((c) => c.id === beforeId) : queue.length;
+    const at = index === -1 ? queue.length : index;
+    const prev = queue[at - 1];
+    const next = queue[at];
+
+    const sameStage = dragged.stageId === stageId;
+    if (sameStage && prev?.id === id) return;
+
+    let position: number;
+    if (prev && next) {
+      if (next.position - prev.position < MIN_GAP) {
+        // Sem espaço entre os vizinhos: normaliza a coluna e refaz a conta.
+        setReordering(true);
+        try {
+          const { positions } = await api.post<{ positions: Array<{ id: string; position: number }> }>(
+            `/api/clients/${ws.client.id}/contents/reorder`,
+            { stageId }
+          );
+          const fresh = new Map(positions.map((p) => [p.id, p.position]));
+          const p = fresh.get(prev.id);
+          const n = fresh.get(next.id);
+          position = p !== undefined && n !== undefined ? (p + n) / 2 : (prev.position + next.position) / 2;
+        } catch {
+          position = (prev.position + next.position) / 2;
+        } finally {
+          setReordering(false);
+        }
+      } else {
+        position = (prev.position + next.position) / 2;
+      }
+    } else if (prev) {
+      position = prev.position + POSITION_STEP;
+    } else if (next) {
+      position = next.position - POSITION_STEP;
+    } else {
+      position = 0;
+    }
+
+    if (sameStage && dragged.position === position) return;
+    await onPatch(id, sameStage ? { position } : { stageId, position });
+  };
+
+  /** Metade de cima do card insere antes dele; metade de baixo, depois. */
+  const hoverCard = (event: React.DragEvent, stageId: string, cardId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const before = event.clientY < rect.top + rect.height / 2;
+    setOverStage(stageId);
+    if (before) return setTarget({ stageId, beforeId: cardId });
+    const queue = queueOf(stageId);
+    const at = queue.findIndex((c) => c.id === cardId);
+    setTarget({ stageId, beforeId: queue[at + 1]?.id ?? null });
   };
 
   return (
     <div className="page board-wrap">
       <div className="view-bar">
-        <p>Arraste os cards entre as etapas — a mudança é salva na hora.</p>
+        <p>
+          Arraste entre as etapas e solte na altura desejada — a linha laranja mostra onde o card encaixa.
+          {reordering && " Reorganizando a fila..."}
+        </p>
         <span className="count-pill">{items.length} conteúdo(s)</span>
       </div>
       <div className="board">
         {ws.stages.map((stage) => {
-          const list = items.filter((x) => x.stageId === stage.id);
+          const list = items.filter((x) => x.stageId === stage.id).sort(byQueue);
           const over = stage.wipLimit != null && list.length > stage.wipLimit;
+          const atEnd = target?.stageId === stage.id && target.beforeId === null;
           return (
             <div
               className={`column ${overStage === stage.id ? "drop-target" : ""}`}
               key={stage.id}
-              onDragOver={(e) => { e.preventDefault(); setOverStage(stage.id); }}
-              onDragLeave={() => setOverStage((s) => (s === stage.id ? null : s))}
+              // Sem card sob o ponteiro, o alvo é o fim da fila.
+              onDragOver={(e) => { e.preventDefault(); setOverStage(stage.id); setTarget({ stageId: stage.id, beforeId: null }); }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setOverStage((s) => (s === stage.id ? null : s));
+                setTarget((t) => (t?.stageId === stage.id ? null : t));
+              }}
               onDrop={() => drop(stage.id)}
             >
               <div className="column-head">
@@ -255,12 +338,14 @@ export function Board(props: ViewProps) {
                 <em className={over ? "over-wip" : ""}>{list.length}{stage.wipLimit != null ? `/${stage.wipLimit}` : ""}</em>
               </div>
               {list.map((item) => (
+                <div key={item.id} className="card-slot">
+                  {target?.stageId === stage.id && target.beforeId === item.id && <div className="drop-line" />}
                 <article
                   className={`content-card ${dragId === item.id ? "dragging" : ""} ${selection.has(item.id) ? "picked" : ""} p${item.priority}`}
-                  key={item.id}
                   draggable
                   onDragStart={() => setDragId(item.id)}
-                  onDragEnd={() => setDragId(null)}
+                  onDragEnd={clearDrag}
+                  onDragOver={(e) => hoverCard(e, stage.id, item.id)}
                   onClick={(e) => (e.metaKey || e.ctrlKey ? toggleSelect(item.id) : onOpen(item))}
                 >
                   <div className="card-top">
@@ -280,7 +365,9 @@ export function Board(props: ViewProps) {
                     {item.priority > 0 && <span className={`prio p${item.priority}`}>{PRIORITY_LABEL[item.priority]}</span>}
                   </div>
                 </article>
+                </div>
               ))}
+              {atEnd && dragId && <div className="drop-line" />}
               <button className="add-card" onClick={() => onCreate({ stageId: stage.id })}>+ Adicionar</button>
             </div>
           );

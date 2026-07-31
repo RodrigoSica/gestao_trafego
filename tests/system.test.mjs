@@ -121,6 +121,7 @@ test("a superfície de API esperada existe", async () => {
     "app/api/clients/[clientId]/channels/route.ts",
     "app/api/publishing/run/route.ts",
     "app/media/[...key]/route.ts",
+    "app/api/clients/[clientId]/contents/reorder/route.ts",
   ];
   for (const route of routes) {
     await access(new URL(route, root));
@@ -139,6 +140,7 @@ test("nenhuma rota de dados escapa da checagem de tenant", async () => {
     "app/api/contents/[contentId]/schedule/route.ts",
     "app/api/contents/[contentId]/assets/route.ts",
     "app/api/clients/[clientId]/channels/route.ts",
+    "app/api/clients/[clientId]/contents/reorder/route.ts",
   ];
   for (const route of routes) {
     const source = await read(route);
@@ -190,6 +192,33 @@ test("dá para remover o registro de um job", async () => {
   assert.match(source, /searchParams\.get\("purge"\) === "1"/);
   assert.match(source, /delete\(publishJobs\)/);
   assert.match(await read("components/publishing.tsx"), /Remover registro/);
+});
+
+test("a normalização de posições não rankeia contra a tabela em atualização", async () => {
+  const source = await read("app/api/clients/[clientId]/contents/reorder/route.ts");
+
+  // A primeira versão usava `select count(*) ... where sibling.position < contents.position`
+  // dentro do próprio UPDATE. Cada linha já gravada entrava na contagem da
+  // seguinte e a coluna colapsava em posições repetidas. A ordem tem que ser
+  // resolvida antes de escrever.
+  assert.doesNotMatch(source, /count\(\*\)[\s\S]*sibling\.position/,
+    "voltou a rankear com subconsulta correlacionada dentro do UPDATE");
+  assert.match(source, /orderBy\(/, "a ordem precisa ser lida antes de gravar");
+  assert.match(source, /case \$\{contents\.id\}/, "posições devem ser gravadas com valores explícitos");
+  // D1 limita 100 parâmetros por statement; são 3 por linha.
+  assert.match(source, /const CHUNK = (\d+)/);
+  const chunk = Number(source.match(/const CHUNK = (\d+)/)[1]);
+  assert.ok(chunk * 3 < 100, `CHUNK ${chunk} estoura o limite de parâmetros do D1`);
+});
+
+test("o quadro ordena por posição e sabe se recuperar", async () => {
+  const source = await read("components/views.tsx");
+  assert.match(source, /function byQueue/, "a coluna precisa ordenar pela fila, não pela data");
+  assert.match(source, /MIN_GAP/, "sem guarda, o ponto médio colapsa após dezenas de encaixes");
+  assert.match(source, /contents\/reorder/, "o quadro precisa normalizar quando o espaço acaba");
+  // Os vizinhos vêm da fila completa: com busca ativa, calcular sobre a lista
+  // filtrada colocaria o card em cima de um vizinho escondido.
+  assert.match(source, /const queueOf = \(stageId: string\) => ws\.contents/);
 });
 
 test("a reserva de job impede aviso duplicado", async () => {

@@ -66,6 +66,7 @@ Envelope padrão: `{ data }` em sucesso, `{ error: { code, message, fields? } }`
 | GET · POST | `/api/clients` | lista clientes com resumo · cadastra cliente |
 | GET · PATCH · DELETE | `/api/clients/:id` | bundle do workspace · edita · arquiva (`?mode=purge` exclui em definitivo) |
 | GET · POST · PATCH | `/api/clients/:id/contents` | lista filtrada · cria · ações em lote |
+| POST | `/api/clients/:id/contents/reorder` | normaliza a ordem de uma etapa |
 | POST · PATCH · DELETE | `/api/clients/:id/taxonomy` | etapas, pilares e funil |
 | GET | `/api/clients/:id/insights` | agregações de desempenho |
 | GET · PATCH · DELETE | `/api/contents/:id` | ficha completa · edita · exclui |
@@ -138,6 +139,30 @@ e a escala derivada, no bloco "tipografia" de `app/studio.css`). Já foi um modo
 opcional atrás de um botão "A+" no cabeçalho; virou padrão a pedido, porque
 texto pequeno atrapalha a leitura no uso diário. **Não reduza esses valores sem
 combinar antes.**
+
+## Ordem da fila no quadro
+
+Cada card tem uma `position` e o fluxo de produção ordena por ela. Arraste um
+card e solte na altura desejada: a linha laranja mostra onde ele encaixa, e a
+nova posição é o ponto médio entre os vizinhos.
+
+Os vizinhos vêm da fila **completa** da etapa, não da lista filtrada pela
+busca. Calcular sobre a lista visível colocaria o card em cima de um vizinho
+escondido pelo filtro.
+
+Dividir o intervalo ao meio gasta precisão. Quando o espaço entre dois vizinhos
+cai abaixo de `MIN_GAP`, o quadro chama
+`POST /api/clients/:id/contents/reorder` e a coluna volta a ficar espaçada de
+1000 em 1000. Medido: partindo de 1000, o limite chega na 30ª inserção seguida
+no mesmo ponto.
+
+O mesmo endpoint aceita `{ "by": "publishDate" }` para devolver a coluna à
+ordem do calendário editorial.
+
+> A normalização resolve a ordem em memória e grava valores explícitos com um
+> `CASE`. Não volte a rankear com subconsulta correlacionada dentro do
+> `UPDATE`: no SQLite as linhas já gravadas entram na contagem das seguintes e
+> a coluna colapsa em posições repetidas. Há teste travando isso.
 
 ## Excluir contas e agendamentos
 

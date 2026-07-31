@@ -25,6 +25,9 @@
 .content-card.p1{border-left:3px solid #e8a727}
 .content-card.p2{border-left:3px solid #d45b52}
 .column-head em.over-wip{background:#ffd9d6;color:#b03d37}
+/* Linha de encaixe: mostra exatamente onde o card vai parar na fila. */
+.card-slot{position:relative}
+.drop-line{height:3px;border-radius:2px;background:var(--brand);margin:3px 0 6px;box-shadow:0 0 0 3px rgba(233,111,52,.18)}
 .status-dot.blue{background:#5c75d8}.status-dot.orange{background:#e9a337}.status-dot.amber{background:#e8a727}.status-dot.red{background:#d45b52}.status-dot.violet{background:#875cc5}.status-dot.teal{background:#3e9f95}.status-dot.green{background:#46a57a}.status-dot.slate{background:#8791a7}
 .dot.orange{background:#e9a337}.dot.green{background:#46a57a}.dot.slate{background:#8791a7}
 .chip.orange,.cal-item.orange{--chip:#ffeadd;--chip-text:#b45a1f;background:var(--chip)}
