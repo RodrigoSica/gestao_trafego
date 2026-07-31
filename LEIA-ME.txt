@@ -1,10 +1,21 @@
-FORJA FLOW - SISTEMA DE CONTEUDO
+STUDIO OS - SISTEMA DE GESTAO DE CONTEUDO (RODRIGO SICHEROLI)
 
 Como abrir:
-1. Clique duas vezes em "Abrir Forja Flow.bat".
+1. Clique duas vezes em "Abrir Studio OS.bat".
 2. Aguarde alguns segundos. O painel abrira no navegador em http://localhost:3001.
 3. Mantenha a janela preta aberta enquanto estiver usando o sistema.
 
-Os campos sao editaveis. As alteracoes ficam salvas neste navegador.
+Na primeira abertura o sistema cria o banco sozinho e ja cadastra a conta
+"Forja do Sica" com os 60 conteudos do cronograma.
 
-O sistema ja inclui os 60 conteudos do cronograma, em calendario, fluxo de producao e biblioteca.
+O que mudou em relacao a versao anterior:
+- Os dados agora ficam em banco (Cloudflare D1), nao mais no navegador.
+- O sistema atende varios clientes. Use a barra lateral > "Clientes" para
+  cadastrar quantas contas quiser; cada uma tem o proprio fluxo, pilares e funil.
+- O kanban aceita arrastar e soltar. No calendario, arraste um card para
+  outro dia para reagendar.
+- Cada conteudo tem abas de Roteiro, Aprovacao (comentarios do cliente) e
+  Metricas (alcance, cliques, leads, receita).
+- Tema claro/escuro no botao de lua/sol.
+
+Atalhos: Ctrl+K busca tudo | "/" foca a busca | "N" cria conteudo

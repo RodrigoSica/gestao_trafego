@@ -1,100 +1,104 @@
-# vinext-starter
+# Studio OS
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Sistema proprietário de gestão editorial e produção de conteúdo de Rodrigo
+Sicheroli. Multi-tenant: uma instalação atende qualquer número de clientes, cada
+um com fluxo de produção, pilares e funil próprios.
 
-## Prerequisites
+Stack: vinext (Next.js App Router) + React 19 + Cloudflare Workers + D1 + Drizzle.
 
-- Node.js `>=22.13.0`
-
-## Quick Start
+## Como rodar
 
 ```bash
 npm install
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+Abra `http://localhost:3001`. No primeiro acesso o front chama
+`POST /api/bootstrap` sozinho: cria as tabelas e semeia a conta **Forja do Sica**
+com os 60 conteúdos do cronograma original.
 
-## Included Shape
+| Comando | O que faz |
+| --- | --- |
+| `npm run dev` | desenvolvimento local com D1 simulado (Miniflare) |
+| `npm run build` | build de produção |
+| `npm test` | build + suíte de testes |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run db:generate` | gera migration Drizzle após mudar `db/schema.ts` |
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+## Modelo de dados
 
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```
+users ─┬─ memberships ─── clients ─┬─ stages    (colunas do kanban)
+       │                           ├─ pillars   (temas editoriais)
+       │                           ├─ funnels   (fases do funil)
+       │                           └─ contents ─┬─ comments  (aprovação do cliente)
+       │                                        ├─ metrics   (desempenho publicado)
+       │                                        └─ assets    (peças e referências)
+       └─ activities (trilha de auditoria por cliente)
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+A taxonomia é **por cliente**: é o que permite operar contas com processos
+editoriais completamente diferentes na mesma instalação.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Identidade e permissões
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+A sessão vem dos headers de identidade do host (`oai-authenticated-user-*`). O
+usuário é criado no primeiro acesso e **o primeiro usuário do banco vira `owner`**
+do estúdio. Sem headers — desenvolvimento local — cai na conta do dono.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+Papéis: `owner`/`admin` enxergam todos os clientes; `member` e `client` só os
+clientes onde têm `membership`. `client` (aprovador externo) tem leitura e pode
+comentar/aprovar, mas não editar.
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+Toda rota de dados chama `assertClientAccess()` antes de tocar o banco — há um
+teste que falha se alguma rota esquecer.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+## API
 
-## Useful Commands
+Envelope padrão: `{ data }` em sucesso, `{ error: { code, message, fields? } }` em falha.
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+| Método | Rota | Uso |
+| --- | --- | --- |
+| POST | `/api/bootstrap` | cria o esquema e semeia a primeira conta (idempotente) |
+| GET · POST | `/api/clients` | lista clientes com resumo · cadastra cliente |
+| GET · PATCH · DELETE | `/api/clients/:id` | bundle do workspace · edita · arquiva |
+| GET · POST · PATCH | `/api/clients/:id/contents` | lista filtrada · cria · ações em lote |
+| POST · PATCH · DELETE | `/api/clients/:id/taxonomy` | etapas, pilares e funil |
+| GET | `/api/clients/:id/insights` | agregações de desempenho |
+| GET · PATCH · DELETE | `/api/contents/:id` | ficha completa · edita · exclui |
+| POST | `/api/contents/:id/comments` | comenta, aprova ou pede ajustes |
+| POST | `/api/contents/:id/metrics` | registra leitura de desempenho |
 
-## Learn More
+## Migrations
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+`db/schema.ts` é a fonte de verdade. Depois de alterá-lo:
+
+1. `npm run db:generate` — gera o SQL em `drizzle/` para o pipeline do host;
+2. atualize `db/ddl.ts` — é o DDL idempotente que `POST /api/bootstrap` aplica.
+
+`npm test` compara as duas fontes e falha se divergirem (tabelas, colunas ou
+índices de tenant).
+
+> D1 aceita no máximo 100 parâmetros por statement. Inserções em massa precisam
+> ser fatiadas — ver `CHUNK` em `lib/provision.ts`.
+
+## Limitações conhecidas
+
+- **Upload de arquivo**: a tabela `assets` existe e a API aceita URLs externas,
+  mas não há upload para R2 — `.openai/hosting.json` mantém `"r2": null`.
+- **Convite de equipe**: `memberships` está modelado e é respeitado nas
+  permissões, mas não há tela de convite por e-mail.
+- **Publicação nas redes**: o sistema planeja, aprova e mede; não publica.
+- `worker/index.ts` (arquivo do template) tem 2 erros de `tsc` por não declarar
+  `Fetcher`/`D1Database`. São anteriores a este trabalho e não afetam o build.
+
+## Estrutura
+
+```
+app/              rotas — página única + 9 route handlers de API
+components/       studio (shell), views, editor, admin, ui, types
+lib/              http (envelope + validação), auth, provision, data, ids
+db/               schema (Drizzle), ddl (bootstrap), seed-forja
+tests/            paridade schema↔DDL, superfície de API, checagem de tenant
+```
