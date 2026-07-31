@@ -1,0 +1,10 @@
+FORJA FLOW - SISTEMA DE CONTEUDO
+
+Como abrir:
+1. Clique duas vezes em "Abrir Forja Flow.bat".
+2. Aguarde alguns segundos. O painel abrira no navegador em http://localhost:3001.
+3. Mantenha a janela preta aberta enquanto estiver usando o sistema.
+
+Os campos sao editaveis. As alteracoes ficam salvas neste navegador.
+
+O sistema ja inclui os 60 conteudos do cronograma, em calendario, fluxo de producao e biblioteca.
