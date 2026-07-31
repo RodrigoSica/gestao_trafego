@@ -32,9 +32,11 @@ com os 60 conteúdos do cronograma original.
 users ─┬─ memberships ─── clients ─┬─ stages    (colunas do kanban)
        │                           ├─ pillars   (temas editoriais)
        │                           ├─ funnels   (fases do funil)
-       │                           └─ contents ─┬─ comments  (aprovação do cliente)
-       │                                        ├─ metrics   (desempenho publicado)
-       │                                        └─ assets    (peças e referências)
+       │                           ├─ channels  (para onde vai o aviso)
+       │                           └─ contents ─┬─ comments      (aprovação do cliente)
+       │                                        ├─ metrics       (desempenho publicado)
+       │                                        ├─ assets        (mídia no R2 ou link)
+       │                                        └─ publish_jobs  (fila de publicação)
        └─ activities (trilha de auditoria por cliente)
 ```
 
@@ -69,6 +71,65 @@ Envelope padrão: `{ data }` em sucesso, `{ error: { code, message, fields? } }`
 | GET · PATCH · DELETE | `/api/contents/:id` | ficha completa · edita · exclui |
 | POST | `/api/contents/:id/comments` | comenta, aprova ou pede ajustes |
 | POST | `/api/contents/:id/metrics` | registra leitura de desempenho |
+| GET · POST · PATCH · DELETE | `/api/contents/:id/schedule` | prévia do aviso · agenda · confirma publicação · cancela |
+| GET · POST · DELETE | `/api/contents/:id/assets` | anexos (upload R2 ou link externo) |
+| GET · POST · DELETE | `/api/clients/:id/channels` | canais de aviso do cliente |
+| POST | `/api/publishing/run` | executa a fila de publicação |
+| GET | `/media/<chave>` | serve a mídia do R2 (público) |
+
+## Agendamento de publicações
+
+Funciona em **modo notificado**: no horário marcado o sistema entrega o pacote
+pronto — legenda montada, arquivos e link de confirmação — para quem vai
+publicar. Cobre todas as redes e formatos, sem depender de aprovação de
+plataforma. A publicação automática via API é a fase seguinte.
+
+Ciclo: `pending` → `sending` → `sent` (avisado) → `done` (confirmado no sistema).
+`failed` e `canceled` são terminais.
+
+### Quem dispara a fila
+
+Dois caminhos, seguros de rodar juntos:
+
+1. **Cron do Cloudflare** — declarado em `vite.config.ts` (`*/5 * * * *`) e
+   tratado por `scheduled()` em `worker/index.ts`. **Nem toda hospedagem honra
+   `triggers`** — o `wrangler.json` gerado sai com `"triggers":{}` até a
+   plataforma preencher. Confirme no seu ambiente antes de confiar nele.
+2. **`POST /api/publishing/run`** — para qualquer agendador externo
+   (cron-job.org, n8n, Agendador de Tarefas do Windows). Autentica pelo header
+   `x-publishing-token` igual ao segredo `PUBLISHING_TOKEN`, ou por sessão de
+   owner/admin.
+
+A reserva de job é um compare-and-swap (`UPDATE ... WHERE status = 'pending'`):
+mesmo que os dois disparem juntos, a mesma publicação nunca é avisada duas
+vezes. A chave `idempotency_key` (`contentId:runAt`) cobre o reagendamento.
+
+### Variáveis de ambiente
+
+| Variável | Para quê |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Bot criado no @BotFather. Sem ela o canal salva mas nunca entrega — a interface avisa |
+| `PUBLIC_BASE_URL` | Origem pública do sistema. **Obrigatória para o cron**: sem ela os links de mídia sairiam quebrados, então a fila nem roda |
+| `PUBLISHING_TOKEN` | Segredo do disparo externo. Sem ela, só owner/admin logado dispara |
+
+### Canais de aviso
+
+Por cliente, em Configurações → Avisos de publicação. Telegram (`chat_id`) ou
+webhook. Webhook aceita https, e http apenas em localhost, para receptor
+auto-hospedado.
+
+> O campo do webhook **não** é uma defesa contra SSRF — `https://interno/...`
+> passa. A proteção é o controle de acesso: só quem tem escrita no cliente
+> cadastra canal. Se um dia usuários menos confiáveis puderem configurar
+> canais, é preciso uma allowlist em `isAllowedWebhook()`.
+
+### Mídia
+
+Upload vai para o R2 e é servido por `GET /media/<chave>`. **A rota é pública
+de propósito**: no modo notificado a pessoa abre no celular sem estar logada, e
+na publicação automática é a própria plataforma que busca o arquivo por URL. A
+proteção é a chave, que não é adivinhável. Não anexe nada que não possa
+circular por link.
 
 ## Migrations
 
@@ -85,20 +146,24 @@ Envelope padrão: `{ data }` em sucesso, `{ error: { code, message, fields? } }`
 
 ## Limitações conhecidas
 
-- **Upload de arquivo**: a tabela `assets` existe e a API aceita URLs externas,
-  mas não há upload para R2 — `.openai/hosting.json` mantém `"r2": null`.
+- **Publicação automática**: o modo notificado está pronto; publicar direto
+  pela API depende de App Review da Meta, auditoria da TikTok e cota do
+  YouTube. `POST /api/contents/:id/schedule` recusa `mode: "auto"` até lá.
+- **Cron da hospedagem**: não confirmado neste ambiente — ver Agendamento.
 - **Convite de equipe**: `memberships` está modelado e é respeitado nas
   permissões, mas não há tela de convite por e-mail.
-- **Publicação nas redes**: o sistema planeja, aprova e mede; não publica.
+- **WhatsApp como canal**: só Telegram e webhook. WhatsApp passaria de novo pela
+  revisão da Meta — o mesmo gargalo que o modo notificado existe para evitar.
 - `worker/index.ts` (arquivo do template) tem 2 erros de `tsc` por não declarar
   `Fetcher`/`D1Database`. São anteriores a este trabalho e não afetam o build.
 
 ## Estrutura
 
 ```
-app/              rotas — página única + 9 route handlers de API
-components/       studio (shell), views, editor, admin, ui, types
-lib/              http (envelope + validação), auth, provision, data, ids
+app/              rotas — página única, 14 route handlers de API e /media
+components/       studio (shell), views, editor, admin, publishing, ui, types
+lib/              http (envelope + validação), auth, provision, data, ids,
+                  publishing (fila e pacote), notify (Telegram/webhook)
 db/               schema (Drizzle), ddl (bootstrap), seed-forja
 tests/            paridade schema↔DDL, superfície de API, checagem de tenant
 ```

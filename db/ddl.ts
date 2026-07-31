@@ -81,6 +81,22 @@ export const DDL: string[] = [
     action TEXT NOT NULL, meta TEXT, created_at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS activities_client_idx ON activities (client_id, created_at)`,
 
+  `CREATE TABLE IF NOT EXISTS publish_jobs (
+    id TEXT PRIMARY KEY, client_id TEXT NOT NULL, content_id TEXT NOT NULL,
+    mode TEXT NOT NULL DEFAULT 'notify', run_at INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT, idempotency_key TEXT NOT NULL, sent_at INTEGER, done_at INTEGER,
+    created_by TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS publish_jobs_key_idx ON publish_jobs (idempotency_key)`,
+  `CREATE INDEX IF NOT EXISTS publish_jobs_due_idx ON publish_jobs (status, run_at)`,
+  `CREATE INDEX IF NOT EXISTS publish_jobs_client_idx ON publish_jobs (client_id, content_id)`,
+
+  `CREATE TABLE IF NOT EXISTS channels (
+    id TEXT PRIMARY KEY, client_id TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'telegram',
+    target TEXT NOT NULL, label TEXT, active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS channels_client_idx ON channels (client_id, active)`,
+
   `CREATE TABLE IF NOT EXISTS templates (
     id TEXT PRIMARY KEY, client_id TEXT, name TEXT NOT NULL,
     format TEXT NOT NULL DEFAULT 'Vídeo', hook TEXT, script TEXT, cta TEXT,

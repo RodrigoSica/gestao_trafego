@@ -185,6 +185,56 @@ export const activities = sqliteTable("activities", {
   createdAt: createdAt(),
 }, (t) => [index("activities_client_idx").on(t.clientId, t.createdAt)]);
 
+/* ------------------------------------------------------------- publicação */
+
+/**
+ * Fila de publicação. Um job por conteúdo agendado.
+ *
+ * `mode` distingue os dois caminhos, como faz o mercado:
+ * - `notify`  → no horário o sistema avisa o responsável, que publica no app.
+ *               Cobre 100% das redes e formatos, sem depender de aprovação.
+ * - `auto`    → publicação direta via API oficial (fase seguinte).
+ *
+ * `idempotencyKey` impede post duplicado quando um retry acontece depois de a
+ * entrega já ter saído — publicar duas vezes é pior que não publicar.
+ */
+export const publishJobs = sqliteTable("publish_jobs", {
+  id: pk(),
+  clientId: text("client_id").notNull(),
+  contentId: text("content_id").notNull(),
+  /** notify | auto */
+  mode: text("mode").notNull().default("notify"),
+  /** epoch ms do disparo */
+  runAt: integer("run_at").notNull(),
+  /** pending | sent | done | failed | canceled */
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  sentAt: integer("sent_at"),
+  doneAt: integer("done_at"),
+  createdBy: text("created_by"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  uniqueIndex("publish_jobs_key_idx").on(t.idempotencyKey),
+  index("publish_jobs_due_idx").on(t.status, t.runAt),
+  index("publish_jobs_client_idx").on(t.clientId, t.contentId),
+]);
+
+/** Para onde vai o aviso de publicação de cada cliente. */
+export const channels = sqliteTable("channels", {
+  id: pk(),
+  clientId: text("client_id").notNull(),
+  /** telegram | webhook */
+  kind: text("kind").notNull().default("telegram"),
+  /** chat_id do Telegram ou URL do webhook */
+  target: text("target").notNull(),
+  label: text("label"),
+  active: integer("active").notNull().default(1),
+  createdAt: createdAt(),
+}, (t) => [index("channels_client_idx").on(t.clientId, t.active)]);
+
 /** Receitas reutilizáveis de conteúdo — aceleram a criação de pauta. */
 export const templates = sqliteTable("templates", {
   id: pk(),
@@ -209,3 +259,5 @@ export type CommentRow = typeof comments.$inferSelect;
 export type MetricRow = typeof metrics.$inferSelect;
 export type ActivityRow = typeof activities.$inferSelect;
 export type AssetRow = typeof assets.$inferSelect;
+export type PublishJobRow = typeof publishJobs.$inferSelect;
+export type ChannelRow = typeof channels.$inferSelect;

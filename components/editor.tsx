@@ -7,6 +7,7 @@ import {
   type Comment, type Content, type Metric, type Workspace,
 } from "./types";
 import { Avatar, Spinner, fmtFull, fmtMoney, fmtNum, relTime, todayIso } from "./ui";
+import { PublishTab } from "./publishing";
 
 type Draft = Omit<Content, "id" | "clientId" | "createdAt" | "updatedAt" | "createdBy"> & { id?: string };
 
@@ -33,7 +34,7 @@ const emptyDraft = (ws: Workspace, seed?: Partial<Content>): Draft => ({
   ...seed,
 });
 
-type Tab = "ficha" | "roteiro" | "aprovacao" | "metricas";
+type Tab = "ficha" | "roteiro" | "aprovacao" | "metricas" | "publicacao";
 
 export function Editor({ ws, content, seed, onClose, onSaved, onDeleted, notify }: {
   ws: Workspace;
@@ -128,7 +129,7 @@ export function Editor({ ws, content, seed, onClose, onSaved, onDeleted, notify 
         </header>
 
         <nav className="tabs">
-          {([["ficha", "Ficha"], ["roteiro", "Roteiro"], ["aprovacao", "Aprovação"], ["metricas", "Métricas"]] as const)
+          {([["ficha", "Ficha"], ["roteiro", "Roteiro"], ["aprovacao", "Aprovação"], ["publicacao", "Publicação"], ["metricas", "Métricas"]] as const)
             .map(([key, label]) => (
               <button
                 key={key}
@@ -227,6 +228,15 @@ export function Editor({ ws, content, seed, onClose, onSaved, onDeleted, notify 
                 if (approval) set("approval", approval);
               }}
               notify={notify}
+            />
+          )}
+
+          {tab === "publicacao" && content && (
+            <PublishTab
+              content={content}
+              ws={ws}
+              notify={notify}
+              onPublished={() => onSaved({ ...content, publishedAt: Date.now() }, false)}
             />
           )}
 

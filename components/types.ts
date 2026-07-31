@@ -31,7 +31,10 @@ export type Comment = {
   createdAt: number; userId: string; userName: string | null; userAccent: string | null;
 };
 
-export type Asset = { id: string; name: string; kind: string; url: string | null; createdAt: number };
+export type Asset = {
+  id: string; name: string; kind: string; mime: string | null; size: number | null;
+  storageKey: string | null; url: string | null; createdAt: number;
+};
 
 export type Metric = {
   id: string; contentId: string; platform: string; capturedAt: number;
@@ -46,9 +49,33 @@ export type Activity = {
   action: string; meta: Record<string, unknown> | null; createdAt: number;
 };
 
+export type JobStatus = "pending" | "sending" | "sent" | "done" | "failed" | "canceled";
+
+export type PublishJob = {
+  id?: string; contentId: string; status: JobStatus; runAt: number;
+  mode: string; lastError: string | null; attempts: number;
+  sentAt?: number | null; doneAt?: number | null;
+};
+
+export type Channel = {
+  id: string; clientId: string; kind: "telegram" | "webhook";
+  target: string; label: string | null; active: boolean; createdAt: number;
+};
+
+export type PublishPackage = {
+  contentId: string; clientName: string; title: string; format: string;
+  platforms: string[]; scheduledFor: number; caption: string;
+  media: Array<{ name: string; kind: string; url: string }>; openUrl: string;
+};
+
 export type Workspace = {
   client: Client; role: string; stages: Stage[]; pillars: Pillar[]; funnels: Funnel[];
-  contents: Content[]; members: Member[]; activity: Activity[];
+  contents: Content[]; members: Member[]; activity: Activity[]; jobs: PublishJob[];
+};
+
+export const JOB_LABEL: Record<JobStatus, string> = {
+  pending: "Agendado", sending: "Enviando", sent: "Avisado",
+  done: "Publicado", failed: "Falhou", canceled: "Cancelado",
 };
 
 export type Insights = {

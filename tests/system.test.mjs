@@ -116,6 +116,11 @@ test("a superfície de API esperada existe", async () => {
     "app/api/contents/[contentId]/route.ts",
     "app/api/contents/[contentId]/comments/route.ts",
     "app/api/contents/[contentId]/metrics/route.ts",
+    "app/api/contents/[contentId]/schedule/route.ts",
+    "app/api/contents/[contentId]/assets/route.ts",
+    "app/api/clients/[clientId]/channels/route.ts",
+    "app/api/publishing/run/route.ts",
+    "app/media/[...key]/route.ts",
   ];
   for (const route of routes) {
     await access(new URL(route, root));
@@ -131,6 +136,9 @@ test("nenhuma rota de dados escapa da checagem de tenant", async () => {
     "app/api/contents/[contentId]/route.ts",
     "app/api/contents/[contentId]/comments/route.ts",
     "app/api/contents/[contentId]/metrics/route.ts",
+    "app/api/contents/[contentId]/schedule/route.ts",
+    "app/api/contents/[contentId]/assets/route.ts",
+    "app/api/clients/[clientId]/channels/route.ts",
   ];
   for (const route of routes) {
     const source = await read(route);
@@ -139,7 +147,28 @@ test("nenhuma rota de dados escapa da checagem de tenant", async () => {
   }
 });
 
-test("o D1 está declarado no hosting", async () => {
+test("os bindings de D1 e R2 estão declarados no hosting", async () => {
   const hosting = JSON.parse(await read(".openai/hosting.json"));
   assert.equal(hosting.d1, "DB", "o binding D1 precisa estar declarado como DB");
+  // Sem R2 o upload de mídia falha em runtime, e a mídia é o que torna o
+  // pacote de publicação útil.
+  assert.equal(hosting.r2, "MEDIA", "o binding R2 precisa estar declarado como MEDIA");
+});
+
+test("a fila roda mesmo se a hospedagem ignorar cron", async () => {
+  // O cron é declarado, mas nem toda plataforma o honra. A rota manual é a
+  // garantia de que o agendamento não depende disso.
+  assert.match(await read("vite.config.ts"), /triggers:\s*\{\s*crons:/);
+  assert.match(await read("worker/index.ts"), /async scheduled\(/);
+  const runRoute = await read("app/api/publishing/run/route.ts");
+  assert.match(runRoute, /PUBLISHING_TOKEN/, "a rota manual precisa de segredo compartilhado");
+  assert.match(runRoute, /x-publishing-token/);
+});
+
+test("a reserva de job impede aviso duplicado", async () => {
+  const source = await read("lib/publishing.ts");
+  // Compare-and-swap: só quem consegue sair de 'pending' processa o job.
+  assert.match(source, /eq\(publishJobs\.status, "pending"\)/);
+  assert.match(source, /meta\?\.changes === 0/);
+  assert.match(source, /idempotencyKey/);
 });

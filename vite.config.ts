@@ -14,6 +14,10 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  // Dispara a fila de publicação a cada 5 minutos. Nem toda hospedagem honra
+  // `triggers`; por isso a fila também roda por POST /api/publishing/run, que
+  // qualquer agendador externo pode chamar. Ver README > Agendamento.
+  triggers: { crons: ["*/5 * * * *"] },
   d1_databases: d1
     ? [
         {

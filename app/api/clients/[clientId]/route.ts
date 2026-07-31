@@ -1,7 +1,7 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import {
-  activities, clients, contents, funnels, memberships, pillars, stages, users,
+  activities, clients, contents, funnels, memberships, pillars, publishJobs, stages, users,
 } from "../../../../db/schema";
 import { assertClientAccess, getSession } from "../../../../lib/auth";
 import { logActivity, toContentDto } from "../../../../lib/data";
@@ -22,7 +22,7 @@ export async function GET(_request: Request, { params }: Ctx) {
     const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
     if (!client) throw notFound("Cliente não encontrado.");
 
-    const [stageRows, pillarRows, funnelRows, contentRows, memberRows, feed] = await Promise.all([
+    const [stageRows, pillarRows, funnelRows, contentRows, memberRows, feed, jobRows] = await Promise.all([
       db.select().from(stages).where(eq(stages.clientId, clientId)).orderBy(asc(stages.position)),
       db.select().from(pillars).where(eq(pillars.clientId, clientId)).orderBy(asc(pillars.position)),
       db.select().from(funnels).where(eq(funnels.clientId, clientId)).orderBy(asc(funnels.position)),
@@ -42,6 +42,14 @@ export async function GET(_request: Request, { params }: Ctx) {
         .where(eq(activities.clientId, clientId))
         .orderBy(desc(activities.createdAt))
         .limit(40),
+      // Só os jobs vivos — o histórico completo fica na ficha do conteúdo.
+      db
+        .select({
+          contentId: publishJobs.contentId, status: publishJobs.status, runAt: publishJobs.runAt,
+          mode: publishJobs.mode, lastError: publishJobs.lastError, attempts: publishJobs.attempts,
+        })
+        .from(publishJobs)
+        .where(and(eq(publishJobs.clientId, clientId), sql`${publishJobs.status} in ('pending', 'sending', 'sent', 'failed')`)),
     ]);
 
     return ok({
@@ -53,6 +61,7 @@ export async function GET(_request: Request, { params }: Ctx) {
       contents: contentRows.map(toContentDto),
       members: memberRows,
       activity: feed.map((a) => ({ ...a, meta: a.meta ? JSON.parse(a.meta) : null })),
+      jobs: jobRows,
     });
   });
 }

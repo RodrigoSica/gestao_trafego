@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, ApiClientError } from "../lib/client-api";
 import type { Client, Funnel, Pillar, Stage, Workspace } from "./types";
 import { EmptyState, Modal, relTime } from "./ui";
+import { ChannelsPanel } from "./publishing";
 
 type Notify = { ok: (m: string) => void; fail: (m: string) => void };
 
@@ -211,6 +212,8 @@ export function SettingsView({ ws, onWorkspaceChange, onClientChange, notify }: 
         items={ws.funnels} ws={ws} onWorkspaceChange={onWorkspaceChange} notify={notify} />
       <TaxonomyEditor kind="pillar" title="Pilares editoriais" hint="Os temas recorrentes da marca."
         items={ws.pillars} ws={ws} onWorkspaceChange={onWorkspaceChange} notify={notify} />
+
+      <ChannelsPanel ws={ws} notify={notify} />
 
       <section className="panel">
         <p className="eyebrow">EQUIPE</p>

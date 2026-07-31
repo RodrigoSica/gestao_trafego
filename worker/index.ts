@@ -25,7 +25,39 @@ interface ExecutionContext {
 // dangerouslyAllowSVG: true in next.config.js and uncomment below:
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
+/**
+ * Cron da fila de publicação.
+ *
+ * Só roda se a hospedagem honrar `triggers.crons` (declarado em
+ * `vite.config.ts`). Não há como garantir isso em toda plataforma, então a
+ * fila continua acessível por `POST /api/publishing/run` para qualquer
+ * agendador externo. Os dois caminhos são seguros de rodar juntos: a reserva
+ * de job é um compare-and-swap, e a mesma publicação nunca é avisada duas
+ * vezes. Ver `lib/publishing.ts`.
+ */
+async function runPublishingQueue(env: Env): Promise<void> {
+  try {
+    const [{ getDb }, { processDueJobs }] = await Promise.all([
+      import("../db"),
+      import("../lib/publishing"),
+    ]);
+    const baseUrl = (env as unknown as { PUBLIC_BASE_URL?: string }).PUBLIC_BASE_URL;
+    if (!baseUrl) {
+      console.error("[cron] PUBLIC_BASE_URL ausente: os links de mídia sairiam quebrados. Fila não executada.");
+      return;
+    }
+    const report = await processDueJobs(getDb(), { baseUrl });
+    if (report.claimed > 0) console.log("[cron] fila de publicação", report);
+  } catch (error) {
+    console.error("[cron] falha ao processar a fila", error);
+  }
+}
+
 const worker = {
+  async scheduled(_event: unknown, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runPublishingQueue(env));
+  },
+
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 

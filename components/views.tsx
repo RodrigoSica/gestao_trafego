@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiClientError } from "../lib/client-api";
 import {
-  APPROVAL_LABEL, FORMATS, PLATFORM_GLYPH, PRIORITY_LABEL,
-  type Content, type Insights, type Workspace,
+  APPROVAL_LABEL, FORMATS, JOB_LABEL, PLATFORM_GLYPH, PRIORITY_LABEL,
+  type Content, type Insights, type JobStatus, type Workspace,
 } from "./types";
 import {
   Avatar, EmptyState, ErrorState, Spinner, fmtDay, fmtMoney, fmtMonth, fmtNum,
@@ -49,6 +49,13 @@ export function filterContents(ws: Workspace, search: string, extra?: (c: Conten
 function ApprovalBadge({ value }: { value: Content["approval"] }) {
   if (value === "none") return null;
   return <span className={`approval ${value}`}>{APPROVAL_LABEL[value]}</span>;
+}
+
+/** Estado do aviso de publicação, quando existe um job vivo para o conteúdo. */
+function JobFlag({ ws, contentId }: { ws: Workspace; contentId: string }) {
+  const job = ws.jobs?.find((j) => j.contentId === contentId);
+  if (!job) return null;
+  return <span className={`job-flag ${job.status}`} title={job.lastError ?? undefined}>{JOB_LABEL[job.status as JobStatus]}</span>;
 }
 
 /* ------------------------------------------------------------- visão geral */
@@ -269,6 +276,7 @@ export function Board(props: ViewProps) {
                       {item.platforms.map((p) => <span key={p} title={p}>{PLATFORM_GLYPH[p] ?? "•"}</span>)}
                     </div>
                     <ApprovalBadge value={item.approval} />
+                    <JobFlag ws={ws} contentId={item.id} />
                     {item.priority > 0 && <span className={`prio p${item.priority}`}>{PRIORITY_LABEL[item.priority]}</span>}
                   </div>
                 </article>
@@ -459,7 +467,7 @@ export function Library(props: ViewProps) {
               {tax.funnel.get(x.funnelId ?? "")?.name ?? "—"}
             </span>
             <span>{fmtDay(x.publishDate)}</span>
-            <span className="stage">{tax.stage.get(x.stageId)?.name ?? "—"}<ApprovalBadge value={x.approval} /></span>
+            <span className="stage">{tax.stage.get(x.stageId)?.name ?? "—"}<ApprovalBadge value={x.approval} /><JobFlag ws={ws} contentId={x.id} /></span>
           </div>
         ))}
       </div>
