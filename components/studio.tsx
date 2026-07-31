@@ -329,6 +329,19 @@ export function Studio() {
             notify={notify}
             onSelect={changeClient}
             onCreated={(client) => { setClients((l) => [...l, client]); changeClient(client.id); }}
+            onArchived={(id) => setClients((l) => l.map((c) => (c.id === id ? { ...c, status: "archived" } : c)))}
+            onRemoved={(id) => {
+              // Some da lista; se era o cliente aberto, cai no próximo disponível.
+              setClients((list) => {
+                const rest = list.filter((c) => c.id !== id);
+                if (activeId === id) {
+                  setSelection(new Set());
+                  setWs(null);
+                  setActiveId(rest[0]?.id ?? null);
+                }
+                return rest;
+              });
+            }}
           />
         )}
 

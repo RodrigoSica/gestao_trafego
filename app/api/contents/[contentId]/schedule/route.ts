@@ -115,13 +115,29 @@ export async function PATCH(request: Request, { params }: Ctx) {
   });
 }
 
-export async function DELETE(_request: Request, { params }: Ctx) {
+/**
+ * Sem parâmetro, cancela o agendamento ativo (o registro fica no histórico).
+ * Com `?purge=1`, apaga os jobs do conteúdo de vez — é o que limpa o selo de
+ * "Falhou" que, de outro modo, ficaria preso no card para sempre.
+ */
+export async function DELETE(request: Request, { params }: Ctx) {
   return route(async () => {
     const { contentId } = await params;
     const db = getDb();
     const session = await getSession();
     const content = await getContentOrThrow(db, contentId);
     await assertClientAccess(session, content.clientId, true);
+
+    const purge = new URL(request.url).searchParams.get("purge") === "1";
+
+    if (purge) {
+      const removed = await db.delete(publishJobs).where(eq(publishJobs.contentId, contentId));
+      await logActivity(db, {
+        clientId: content.clientId, contentId, userId: session.user.id,
+        action: "publish.job_removed", meta: { title: content.title },
+      });
+      return ok({ purged: true, removed: (removed as { meta?: { changes?: number } }).meta?.changes ?? 0 });
+    }
 
     await db
       .update(publishJobs)

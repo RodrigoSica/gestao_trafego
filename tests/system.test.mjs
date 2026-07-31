@@ -165,6 +165,33 @@ test("a fila roda mesmo se a hospedagem ignorar cron", async () => {
   assert.match(runRoute, /x-publishing-token/);
 });
 
+test("a exclusão definitiva de cliente é guardada e cascateia", async () => {
+  const source = await read("app/api/clients/[clientId]/route.ts");
+  // Arquivar continua sendo o padrão: só `?mode=purge` destrói.
+  assert.match(source, /mode !== "purge"/);
+  assert.match(source, /purgeClientMedia/, "o purge precisa limpar os arquivos no R2");
+  assert.match(source, /forbidden\(/, "purge é restrito a owner ou admin");
+  // Toda tabela filha precisa entrar na cascata, senão sobra órfão.
+  for (const table of ["comments", "metrics", "assets", "publishJobs", "channels",
+                       "contents", "stages", "pillars", "funnels", "memberships",
+                       "activities", "templates"]) {
+    assert.match(source, new RegExp(`\\b${table}\\b`), `${table} fora da cascata de exclusão`);
+  }
+
+  // O card não pode ter botão dentro de botão.
+  const admin = await read("components/admin.tsx");
+  assert.match(admin, /client-card-main/);
+  assert.match(admin, /DeleteClientModal/);
+});
+
+test("dá para remover o registro de um job", async () => {
+  const source = await read("app/api/contents/[contentId]/schedule/route.ts");
+  // Sem isso, um job `failed` deixaria o selo preso no card para sempre.
+  assert.match(source, /searchParams\.get\("purge"\) === "1"/);
+  assert.match(source, /delete\(publishJobs\)/);
+  assert.match(await read("components/publishing.tsx"), /Remover registro/);
+});
+
 test("a reserva de job impede aviso duplicado", async () => {
   const source = await read("lib/publishing.ts");
   // Compare-and-swap: só quem consegue sair de 'pending' processa o job.

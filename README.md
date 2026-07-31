@@ -64,14 +64,14 @@ Envelope padrão: `{ data }` em sucesso, `{ error: { code, message, fields? } }`
 | --- | --- | --- |
 | POST | `/api/bootstrap` | cria o esquema e semeia a primeira conta (idempotente) |
 | GET · POST | `/api/clients` | lista clientes com resumo · cadastra cliente |
-| GET · PATCH · DELETE | `/api/clients/:id` | bundle do workspace · edita · arquiva |
+| GET · PATCH · DELETE | `/api/clients/:id` | bundle do workspace · edita · arquiva (`?mode=purge` exclui em definitivo) |
 | GET · POST · PATCH | `/api/clients/:id/contents` | lista filtrada · cria · ações em lote |
 | POST · PATCH · DELETE | `/api/clients/:id/taxonomy` | etapas, pilares e funil |
 | GET | `/api/clients/:id/insights` | agregações de desempenho |
 | GET · PATCH · DELETE | `/api/contents/:id` | ficha completa · edita · exclui |
 | POST | `/api/contents/:id/comments` | comenta, aprova ou pede ajustes |
 | POST | `/api/contents/:id/metrics` | registra leitura de desempenho |
-| GET · POST · PATCH · DELETE | `/api/contents/:id/schedule` | prévia do aviso · agenda · confirma publicação · cancela |
+| GET · POST · PATCH · DELETE | `/api/contents/:id/schedule` | prévia do aviso · agenda · confirma publicação · cancela (`?purge=1` apaga o registro) |
 | GET · POST · DELETE | `/api/contents/:id/assets` | anexos (upload R2 ou link externo) |
 | GET · POST · DELETE | `/api/clients/:id/channels` | canais de aviso do cliente |
 | POST | `/api/publishing/run` | executa a fila de publicação |
@@ -130,6 +130,23 @@ de propósito**: no modo notificado a pessoa abre no celular sem estar logada, e
 na publicação automática é a própria plataforma que busca o arquivo por URL. A
 proteção é a chave, que não é adivinhável. Não anexe nada que não possa
 circular por link.
+
+## Excluir contas e agendamentos
+
+**Clientes** — o × no card abre duas saídas de pesos diferentes de propósito:
+
+- **Arquivar** (padrão): esconde a conta, preserva tudo, reversível.
+- **Excluir definitivamente**: apaga conteúdos, comentários, métricas, anexos
+  (inclusive os arquivos no R2), fila, canais, taxonomia e auditoria. Restrito a
+  owner/admin e, quando há conteúdo, exige digitar o nome do cliente.
+
+Os arquivos do R2 são removidos **antes** dos registros: se o bucket falhar, o
+cliente continua de pé e a operação pode ser repetida. A ordem inversa deixaria
+lixo órfão no bucket sem nenhum registro apontando para ele.
+
+**Agendamentos** — na aba Publicação, *Cancelar* interrompe o disparo e mantém
+o histórico; *Remover registro* apaga o job. O segundo existe porque um job
+`failed` deixaria o selo vermelho preso no card para sempre.
 
 ## Migrations
 

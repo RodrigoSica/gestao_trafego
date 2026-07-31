@@ -70,6 +70,18 @@ export function PublishTab({ content, ws, notify, onPublished }: {
     } finally { setBusy(false); }
   };
 
+  const purge = async () => {
+    if (!confirmDialog("Remover o registro deste agendamento? O histórico do job é apagado.")) return;
+    setBusy(true);
+    try {
+      await api.del(`/api/contents/${content.id}/schedule?purge=1`);
+      notify.ok("Registro removido.");
+      reload();
+    } catch (e) {
+      notify.fail((e as ApiClientError).message);
+    } finally { setBusy(false); }
+  };
+
   const confirm = async () => {
     setBusy(true);
     try {
@@ -144,6 +156,7 @@ export function PublishTab({ content, ws, notify, onPublished }: {
         <input type="datetime-local" value={runAt} onChange={(e) => setRunAt(e.target.value)} />
       </label>
       <div className="approval-actions">
+        {job && <button className="danger-ghost" onClick={purge} disabled={busy}>Remover registro</button>}
         {live && <button onClick={cancel} disabled={busy}>Cancelar agendamento</button>}
         {job?.status === "sent" && <button className="primary" onClick={confirm} disabled={busy}>Já publiquei</button>}
         <button className={live ? "" : "primary"} onClick={schedule} disabled={busy}>

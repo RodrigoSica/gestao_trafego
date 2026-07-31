@@ -10,15 +10,18 @@ type Notify = { ok: (m: string) => void; fail: (m: string) => void };
 
 /* ---------------------------------------------------------------- clientes */
 
-export function ClientsView({ clients, activeId, onSelect, onCreated, canManage, notify }: {
+export function ClientsView({ clients, activeId, onSelect, onCreated, onArchived, onRemoved, canManage, notify }: {
   clients: Client[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onCreated: (client: Client) => void;
+  onArchived: (id: string) => void;
+  onRemoved: (id: string) => void;
   canManage: boolean;
   notify: Notify;
 }) {
   const [creating, setCreating] = useState(false);
+  const [removing, setRemoving] = useState<Client | null>(null);
 
   return (
     <div className="page clients-page">
@@ -37,28 +40,46 @@ export function ClientsView({ clients, activeId, onSelect, onCreated, canManage,
       ) : (
         <div className="client-grid">
           {clients.map((c) => (
-            <button
+            <div
               key={c.id}
               className={`client-card ${c.id === activeId ? "active" : ""} ${c.status !== "active" ? "muted" : ""}`}
-              onClick={() => onSelect(c.id)}
             >
-              <span className="client-mark" style={{ background: c.brandPrimary }}>{c.initials ?? "??"}</span>
-              <div>
-                <b>{c.name}</b>
-                <small>{c.tagline ?? c.slug}</small>
-              </div>
+              {/* Botão de excluir não pode ficar dentro do botão do card. */}
+              <button className="client-card-main" onClick={() => onSelect(c.id)}>
+                <span className="client-mark" style={{ background: c.brandPrimary }}>{c.initials ?? "??"}</span>
+                <div>
+                  <b>{c.name}</b>
+                  <small>
+                    {c.tagline ?? c.slug}
+                    {c.status !== "active" && <em className="client-status">{c.status}</em>}
+                  </small>
+                </div>
+              </button>
               <div className="client-stats">
                 <span><em>{c.stats?.total ?? 0}</em>conteúdos</span>
                 <span><em>{c.stats?.pending ?? 0}</em>com o cliente</span>
                 <span><em>{c.stats?.published ?? 0}</em>publicados</span>
               </div>
-              {c.status !== "active" && <span className="client-status">{c.status}</span>}
-            </button>
+              {canManage && (
+                <button className="client-delete" onClick={() => setRemoving(c)} aria-label={`Excluir ${c.name}`} title="Excluir cliente">
+                  ×
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
 
       {creating && <NewClientModal onClose={() => setCreating(false)} onCreated={onCreated} notify={notify} />}
+      {removing && (
+        <DeleteClientModal
+          client={removing}
+          notify={notify}
+          onClose={() => setRemoving(null)}
+          onArchived={onArchived}
+          onRemoved={onRemoved}
+        />
+      )}
     </div>
   );
 }
@@ -134,6 +155,90 @@ function NewClientModal({ onClose, onCreated, notify }: {
       <p className="muted-line">
         O cliente já nasce com o fluxo padrão de 6 etapas e as 6 fases de funil — tudo editável em Configurações.
       </p>
+    </Modal>
+  );
+}
+
+/**
+ * Duas saídas, com pesos diferentes de propósito.
+ *
+ * Arquivar é reversível e preserva o histórico — deveria ser a escolha normal.
+ * Excluir apaga conteúdos, comentários, métricas, arquivos e auditoria sem
+ * volta; por isso exige digitar o nome quando há conteúdo em jogo, e não é a
+ * ação em destaque.
+ */
+function DeleteClientModal({ client, onClose, onArchived, onRemoved, notify }: {
+  client: Client;
+  onClose: () => void;
+  onArchived: (id: string) => void;
+  onRemoved: (id: string) => void;
+  notify: Notify;
+}) {
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const total = client.stats?.total ?? 0;
+  const needsTyping = total > 0;
+  const canPurge = !needsTyping || typed.trim().toLowerCase() === client.name.trim().toLowerCase();
+
+  const archive = async () => {
+    setBusy(true);
+    try {
+      await api.del(`/api/clients/${client.id}`);
+      onArchived(client.id);
+      notify.ok(`"${client.name}" arquivado.`);
+      onClose();
+    } catch (e) {
+      notify.fail((e as ApiClientError).message);
+    } finally { setBusy(false); }
+  };
+
+  const purge = async () => {
+    if (!canPurge) return;
+    setBusy(true);
+    try {
+      const result = await api.del<{ contents: number; files: number }>(`/api/clients/${client.id}?mode=purge`);
+      onRemoved(client.id);
+      notify.ok(`"${client.name}" excluído — ${result.contents} conteúdo(s) e ${result.files} arquivo(s) removidos.`);
+      onClose();
+    } catch (e) {
+      notify.fail((e as ApiClientError).message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      eyebrow="REMOVER CONTA"
+      title={client.name}
+      onClose={onClose}
+      footer={
+        <div>
+          <button onClick={onClose}>Cancelar</button>
+          <button onClick={archive} disabled={busy}>Arquivar</button>
+          <button className="danger" onClick={purge} disabled={busy || !canPurge}>
+            {busy ? "Excluindo..." : "Excluir definitivamente"}
+          </button>
+        </div>
+      }
+    >
+      <p className="muted-line">
+        <b>Arquivar</b> esconde a conta e mantém tudo salvo — dá para reverter depois em Configurações.
+      </p>
+
+      <div className="danger-box">
+        <b>Excluir definitivamente apaga, sem volta:</b>
+        <ul>
+          <li>{total} conteúdo(s), com roteiros, comentários e métricas</li>
+          <li>todos os arquivos enviados</li>
+          <li>fluxo, pilares, funil, canais de aviso e histórico da conta</li>
+        </ul>
+      </div>
+
+      {needsTyping && (
+        <label className="full">
+          Para confirmar, digite <code>{client.name}</code>
+          <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={client.name} autoFocus />
+        </label>
+      )}
     </Modal>
   );
 }

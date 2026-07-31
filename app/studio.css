@@ -51,16 +51,36 @@
 .client-mark{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:12px;font-weight:bold;color:#fff;flex:none}
 .client-mark.small{width:28px;height:28px;font-size:11px}
 .client-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-.client-card{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:15px;padding:20px;text-align:left;position:relative;color:var(--ink)}
+.client-card{display:flex;flex-direction:column;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:15px;padding:20px;position:relative;color:var(--ink)}
 .client-card:hover{border-color:var(--brand)}
 .client-card.active{border-color:var(--brand);box-shadow:0 0 0 2px rgba(233,111,52,.18)}
 .client-card.muted{opacity:.55}
+/* O card é um contêiner: o alvo clicável e o botão de excluir são irmãos,
+   porque botão dentro de botão é HTML inválido. */
+.client-card-main{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;width:100%;border:0;background:transparent;padding:0;text-align:left;color:inherit}
 .client-card b{display:block;font-size:16px}
-.client-card small{color:var(--muted);font-size:12px}
-.client-stats{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
+.client-card small{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:7px}
+.client-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px solid var(--line);padding-top:12px}
 .client-stats span{font-size:11px;color:var(--muted);display:block}
 .client-stats em{display:block;font-style:normal;font-size:19px;font-weight:bold;color:var(--ink)}
-.client-status{position:absolute;top:14px;right:14px;font-size:10px;background:var(--surface-3);color:var(--muted);border-radius:10px;padding:3px 8px}
+.client-status{font-style:normal;font-size:10px;background:var(--surface-3);color:var(--muted);border-radius:10px;padding:2px 8px;flex:none}
+.client-delete{position:absolute;top:12px;right:12px;width:28px;height:28px;border:0;border-radius:50%;background:transparent;color:var(--muted);font-size:20px;line-height:1;opacity:0;transition:opacity .12s,background .12s,color .12s}
+.client-card:hover .client-delete,.client-delete:focus-visible{opacity:1}
+.client-delete:hover{background:#ffe6e4;color:var(--danger)}
+[data-theme="dark"] .client-delete:hover{background:#3a1f1e}
+/* Em telas de toque não há hover: o botão fica sempre visível. */
+@media(hover:none){.client-delete{opacity:1}}
+
+/* ------------------------------------------------------ ações destrutivas */
+.danger,.editor footer .danger{background:var(--danger)!important;color:#fff!important;border:0;border-radius:8px;padding:10px 13px;font-size:13px;font-weight:bold}
+.danger:disabled{opacity:.45;cursor:not-allowed}
+.danger-ghost{color:var(--danger)!important;border-color:#e8bcb9!important}
+.danger-box{border:1px solid #e8bcb9;background:#fff5f4;border-radius:11px;padding:14px 16px;margin:14px 0}
+[data-theme="dark"] .danger-box{background:#2a1817;border-color:#4a2a28}
+.danger-box b{display:block;font-size:13px;color:var(--danger);margin-bottom:8px}
+.danger-box ul{margin:0;padding-left:18px}
+.danger-box li{font-size:12px;line-height:1.7;color:var(--ink)}
+.editor code{background:var(--surface-3);border-radius:4px;padding:1px 6px;font-size:12px}
 
 /* ------------------------------------------------------------ ritmo/alerta */
 .pace-bar{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:15px;padding:18px 22px;margin-bottom:18px}
