@@ -132,8 +132,10 @@ export async function seedForja(db: Db, ownerUserId: string): Promise<ClientRow 
     }
   );
 
-  const stageByIndex = (i: number) =>
-    (i < 6 ? stageRows[1] : i < 12 ? stageRows[2] : i < 18 ? stageRows[3] : stageRows[4]).id;
+  // Tudo entra na primeira etapa. A versão anterior espalhava os conteúdos
+  // pelo fluxo por índice, o que fazia o painel afirmar que havia gravação e
+  // edição em andamento antes de qualquer peça existir.
+  const firstStageId = stageRows[0].id;
   const pillarId = (name: string) => pillarRows.find((p) => p.name === name)?.id ?? null;
   const funnelId = (name: string) => funnelRows.find((f) => f.name === name)?.id ?? null;
 
@@ -145,7 +147,7 @@ export async function seedForja(db: Db, ownerUserId: string): Promise<ClientRow 
     format,
     publishDate: date,
     publishTime: null,
-    stageId: stageByIndex(i),
+    stageId: firstStageId,
     pillarId: pillarId(pillar),
     funnelId: funnelId(funnel),
     platforms: JSON.stringify(format === "Vídeo" ? ["Instagram", "TikTok"] : ["Instagram"]),

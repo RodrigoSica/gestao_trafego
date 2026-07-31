@@ -33,15 +33,15 @@ export function Studio() {
   const [navOpen, setNavOpen] = useState(false);
 
   /**
-   * Tema e conforto de leitura vivem em atributos de `<html>`, aplicados pelo
-   * script inline do layout antes da hidratação. Sem estado React aqui: evita
-   * divergência de hidratação e o flash de tema na primeira pintura.
+   * O tema vive num atributo de `<html>`, aplicado pelo script inline do
+   * layout antes da hidratação. Sem estado React aqui: evita divergência de
+   * hidratação e o flash de tema na primeira pintura.
    */
-  const togglePref = (attr: "theme" | "reading", a: string, b: string, storageKey: string) => {
+  const toggleTheme = () => {
     const root = document.documentElement;
-    const next = root.dataset[attr] === a ? b : a;
-    root.dataset[attr] = next;
-    localStorage.setItem(storageKey, next);
+    const next = root.dataset.theme === "dark" ? "light" : "dark";
+    root.dataset.theme = next;
+    localStorage.setItem("studio-theme", next);
   };
 
   /* ------------------------------------------------------------------- boot */
@@ -310,12 +310,8 @@ export function Studio() {
               <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar conteúdo  (/)" />
             </label>
             <button className="icon-button theme-toggle" aria-label="Alternar tema" title="Alternar tema"
-              onClick={() => togglePref("theme", "dark", "light", "studio-theme")}>
+              onClick={toggleTheme}>
               <span className="on-dark">☀</span><span className="on-light">☾</span>
-            </button>
-            <button className="reading-button" title="Conforto de leitura"
-              onClick={() => togglePref("reading", "large", "normal", "studio-reading")}>
-              A<span>+</span>
             </button>
             {activeId && <button className="primary" onClick={() => setEditing({ content: null })}>+ Novo conteúdo</button>}
           </div>

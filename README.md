@@ -131,6 +131,14 @@ na publicação automática é a própria plataforma que busca o arquivo por URL
 proteção é a chave, que não é adivinhável. Não anexe nada que não possa
 circular por link.
 
+## Tipografia
+
+O corpo de texto usa tamanhos ampliados de forma permanente (`.shell` em 18px
+e a escala derivada, no bloco "tipografia" de `app/studio.css`). Já foi um modo
+opcional atrás de um botão "A+" no cabeçalho; virou padrão a pedido, porque
+texto pequeno atrapalha a leitura no uso diário. **Não reduza esses valores sem
+combinar antes.**
+
 ## Excluir contas e agendamentos
 
 **Clientes** — o × no card abre duas saídas de pesos diferentes de propósito:

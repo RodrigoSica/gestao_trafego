@@ -12,7 +12,6 @@
 [data-theme="dark"] .editor input,[data-theme="dark"] .editor select,[data-theme="dark"] .editor textarea{background:var(--surface-2);border-color:var(--line);color:var(--ink)}
 [data-theme="dark"] .content-card h4,[data-theme="dark"] .data-row strong,[data-theme="dark"] .timeline-row b,[data-theme="dark"] .calendar-cell>b,[data-theme="dark"] .metric b,[data-theme="dark"] h1,[data-theme="dark"] h2,[data-theme="dark"] h3{color:var(--ink)}
 [data-theme="dark"] .integration-card{background:#171c2e;border-color:#333a52}
-[data-theme="dark"] .reading-button{background:var(--card);border-color:var(--line);color:var(--ink)}
 [data-theme="dark"] .timeline-row,[data-theme="dark"] .card-foot,[data-theme="dark"] .data-row{border-top-color:var(--line)}
 
 /* --- kanban de largura variável: o nº de etapas é configurável por cliente */
@@ -201,27 +200,28 @@
 .header-left{display:flex;align-items:center;gap:12px}
 .nav-toggle{display:none;border:1px solid var(--line);background:var(--card);border-radius:9px;height:42px;width:42px;font-size:17px;color:var(--ink)}
 
-/* ------------------------------------- alternadores dirigidos por atributo */
+/* --------------------------------------------- alternador de tema (atributo) */
 .theme-toggle .on-dark,.theme-toggle .on-light{display:none}
 :root[data-theme="dark"] .theme-toggle .on-dark{display:inline}
 :root[data-theme="light"] .theme-toggle .on-light{display:inline}
-:root[data-reading="large"] .reading-button{background:#1f2948;color:#fff;border-color:#1f2948}
-:root[data-theme="dark"][data-reading="large"] .reading-button{background:var(--brand);border-color:var(--brand)}
-:root[data-reading="large"] .shell{font-size:18px}
-:root[data-reading="large"] .hero h2{font-size:44px}
-:root[data-reading="large"] .content-card h4{font-size:17px}
-:root[data-reading="large"] .content-card p,
-:root[data-reading="large"] .data-row>span,
-:root[data-reading="large"] .timeline-row small{font-size:14px}
-:root[data-reading="large"] .chip{font-size:12px}
-:root[data-reading="large"] .cal-item{font-size:13px}
-:root[data-reading="large"] .nav{font-size:16px}
-:root[data-reading="large"] .metric span{font-size:14px}
-:root[data-reading="large"] .calendar-cell{min-height:150px}
-:root[data-reading="large"] .editor input,
-:root[data-reading="large"] .editor select,
-:root[data-reading="large"] .editor textarea{font-size:16px}
-@media(max-width:720px){:root[data-reading="large"] .cal-item{font-size:0}}
+
+/* ------------------------------------------------------------ tipografia
+   Corpo de texto ampliado, sempre. Era um modo opcional atrás do botão "A+";
+   virou padrão a pedido — texto pequeno atrapalhava a leitura no uso diário.
+   Não reduza estes valores sem combinar antes. */
+.shell{font-size:18px}
+.hero h2{font-size:44px}
+.content-card h4{font-size:17px}
+.content-card p,.data-row>span,.timeline-row small{font-size:14px}
+.chip{font-size:12px}
+.cal-item{font-size:13px}
+.nav{font-size:16px}
+.metric span{font-size:14px}
+.calendar-cell{min-height:150px}
+.editor input,.editor select,.editor textarea{font-size:16px}
+.editor label,.editor legend{font-size:13px}
+.muted-line,.activity-row small,.client-card small{font-size:13px}
+@media(max-width:720px){.cal-item{font-size:0}.hero h2{font-size:32px}}
 
 /* ------------------------------------------------------------- publicação */
 .publish-status{border-radius:12px;padding:14px 16px;background:var(--surface-2);margin-bottom:16px}
