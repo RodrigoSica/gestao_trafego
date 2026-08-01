@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiClientError } from "../lib/client-api";
 import {
   APPROVAL_LABEL, FORMATS, PLATFORMS, PRIORITY_LABEL,
-  type Comment, type Content, type Metric, type Workspace,
+  type Asset, type Comment, type Content, type Metric, type Workspace,
 } from "./types";
 import { Avatar, Spinner, fmtFull, fmtMoney, fmtNum, relTime, todayIso } from "./ui";
 import { PublishTab } from "./publishing";
@@ -34,12 +34,13 @@ const emptyDraft = (ws: Workspace, seed?: Partial<Content>): Draft => ({
   ...seed,
 });
 
-type Tab = "ficha" | "roteiro" | "aprovacao" | "metricas" | "publicacao";
+export type EditorTab = "ficha" | "roteiro" | "inspiracoes" | "aprovacao" | "metricas" | "publicacao";
 
-export function Editor({ ws, content, seed, onClose, onSaved, onDeleted, notify }: {
+export function Editor({ ws, content, seed, initialTab, onClose, onSaved, onDeleted, notify }: {
   ws: Workspace;
   content: Content | null;
   seed?: Partial<Content>;
+  initialTab?: EditorTab;
   onClose: () => void;
   onSaved: (content: Content, isNew: boolean) => void;
   onDeleted: (id: string) => void;
@@ -47,7 +48,7 @@ export function Editor({ ws, content, seed, onClose, onSaved, onDeleted, notify 
 }) {
   const isNew = !content;
   const [draft, setDraft] = useState<Draft>(() => (content ? { ...content } : emptyDraft(ws, seed)));
-  const [tab, setTab] = useState<Tab>("ficha");
+  const [tab, setTab] = useState<EditorTab>(initialTab ?? "ficha");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [comments, setComments] = useState<Comment[] | null>(isNew ? [] : null);
@@ -129,7 +130,7 @@ export function Editor({ ws, content, seed, onClose, onSaved, onDeleted, notify 
         </header>
 
         <nav className="tabs">
-          {([["ficha", "Ficha"], ["roteiro", "Roteiro"], ["aprovacao", "Aprovação"], ["publicacao", "Publicação"], ["metricas", "Métricas"]] as const)
+          {([["ficha", "Ficha"], ["roteiro", "Roteiro"], ["inspiracoes", "✦ Inspirações"], ["aprovacao", "Aprovação"], ["publicacao", "Publicação"], ["metricas", "Métricas"]] as const)
             .map(([key, label]) => (
               <button
                 key={key}
@@ -219,6 +220,8 @@ export function Editor({ ws, content, seed, onClose, onSaved, onDeleted, notify 
             </>
           )}
 
+          {tab === "inspiracoes" && content && <InspirationsTab content={content} />}
+
           {tab === "aprovacao" && content && (
             <ApprovalTab
               content={content}
@@ -257,6 +260,140 @@ export function Editor({ ws, content, seed, onClose, onSaved, onDeleted, notify 
         </footer>
       </section>
     </div>
+  );
+}
+
+function InspirationsTab({ content }: { content: Content }) {
+  const [assets, setAssets] = useState<Asset[] | null>(null);
+  const [url, setUrl] = useState("");
+  const [name, setName] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.get<{ assets: Asset[] }>(`/api/contents/${content.id}/assets`)
+      .then((data) => alive && setAssets(data.assets))
+      .catch((e: ApiClientError) => alive && setError(e.message));
+    return () => { alive = false; };
+  }, [content.id]);
+
+  const addLink = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const cleanUrl = url.trim();
+    if (!/^https?:\/\//i.test(cleanUrl)) return setError("Cole um link completo, começando com http:// ou https://.");
+    setBusy(true); setError("");
+    try {
+      const { asset } = await api.post<{ asset: Asset }>(`/api/contents/${content.id}/assets`, { url: cleanUrl, name: name.trim() });
+      setAssets((list) => [asset, ...(list ?? [])]);
+      setUrl(""); setName("");
+      setAddOpen(false);
+    } catch (e) {
+      setError((e as ApiClientError).message);
+    } finally { setBusy(false); }
+  };
+
+  const addFile = async (file: File) => {
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      setError("Escolha uma imagem ou um vídeo.");
+      return;
+    }
+
+    const form = new FormData();
+    form.append("file", file);
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/contents/${content.id}/assets`, { method: "POST", body: form });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error((payload as { error?: { message?: string } })?.error?.message ?? "Não foi possível anexar o arquivo.");
+      }
+      const asset = (payload as { data: { asset: Asset } }).data.asset;
+      setAssets((list) => [asset, ...(list ?? [])]);
+      setAddOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível anexar o arquivo.");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  return (
+    <section className="inspirations-tab">
+      <div className="inspirations-intro">
+        <div className="inspirations-mark">✦</div>
+        <div>
+          <p className="eyebrow">MOODBOARD DO JOB</p>
+          <h3>Inspirações para “{content.title}”</h3>
+          <p>Este espaço reunirá imagens, vídeos, links e referências visuais vinculadas somente a este conteúdo.</p>
+        </div>
+      </div>
+      <div className="moodboard-placeholder" aria-label="Estrutura inicial do moodboard">
+        <div><span>▧</span><small>Imagem</small></div>
+        <div><span>▶</span><small>Vídeo</small></div>
+        <div><span>↗</span><small>Link</small></div>
+      </div>
+      <button className="inspiration-shortcut" onClick={() => { setError(""); setAddOpen((open) => !open); }} aria-expanded={addOpen}>
+        + Adicionar inspiração
+      </button>
+      {addOpen && (
+        <div className="inspirations-next">
+          <b>Adicionar ao moodboard</b>
+          <p>Escolha uma foto ou vídeo no computador, inclusive em uma pasta sincronizada do Google Drive, ou salve o link de uma referência.</p>
+          <div className="inspiration-picker">
+            <div className="inspiration-file-choice">
+              <span className="inspiration-picker-icon">▧</span>
+              <div>
+                <strong>Arquivo do computador</strong>
+                <small>Abre o Explorer do Windows.</small>
+              </div>
+              <input
+                ref={fileRef}
+                className="inspiration-file-input"
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => { const file = e.target.files?.[0]; if (file) void addFile(file); }}
+              />
+              <button type="button" className="inspiration-file-button" onClick={() => fileRef.current?.click()} disabled={busy}>
+                {busy ? "Enviando..." : "Escolher arquivo"}
+              </button>
+            </div>
+            <div className="inspiration-or" aria-hidden="true"><span>ou</span></div>
+            <form className="inspiration-form" onSubmit={addLink}>
+              <div className="inspiration-link-fields">
+                <strong>Link de referência</strong>
+                <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://drive.google.com/..." aria-label="Link da inspiração" />
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome opcional" aria-label="Nome da inspiração" />
+              </div>
+              <button className="primary" disabled={busy}>{busy ? "Salvando..." : "Salvar link"}</button>
+            </form>
+          </div>
+        </div>
+      )}
+      <div className="inspiration-assets">
+        {error && <p className="inspiration-error" role="alert">{error}</p>}
+        {assets && assets.length > 0 && (
+          <div className="inspiration-links">
+            {assets.map((asset) => (
+              asset.url ? (
+                <a key={asset.id} href={asset.url} target="_blank" rel="noreferrer">
+                  <span>↗</span>{asset.name}
+                </a>
+              ) : (
+                <div key={asset.id} className="inspiration-file-item">
+                  <span>{asset.kind === "video" ? "▶" : "▧"}</span>
+                  <div><b>{asset.name}</b><small>Arquivo anexado ao job</small></div>
+                </div>
+              )
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="drive-note">Ao escolher um arquivo, você pode navegar pelas pastas do Google Drive que já estiverem sincronizadas no Windows.</p>
+    </section>
   );
 }
 

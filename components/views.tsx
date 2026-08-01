@@ -13,7 +13,7 @@ import {
 
 export type ViewProps = {
   ws: Workspace;
-  onOpen: (content: Content) => void;
+  onOpen: (content: Content, tab?: "inspiracoes") => void;
   onPatch: (id: string, patch: Partial<Content>) => Promise<void>;
   onCreate: (seed?: Partial<Content>) => void;
   onGo: (view: string) => void;
@@ -60,8 +60,9 @@ function JobFlag({ ws, contentId }: { ws: Workspace; contentId: string }) {
 
 /* ------------------------------------------------------------- visão geral */
 
-export function Overview({ ws, onOpen, onGo, onCreate }: ViewProps) {
+export function Overview({ ws, onOpen, onGo, onCreate, onPatch }: ViewProps) {
   const tax = useTaxonomy(ws);
+  const [quickIdea, setQuickIdea] = useState("");
   const doneIds = new Set(ws.stages.filter((s) => s.kind === "done").map((s) => s.id));
   const scheduledIds = new Set(ws.stages.filter((s) => s.kind === "scheduled").map((s) => s.id));
 
@@ -85,9 +86,74 @@ export function Overview({ ws, onOpen, onGo, onCreate }: ViewProps) {
     () => ws.contents.filter((c) => !doneIds.has(c.stageId) && c.publishDate < todayIso()),
     [ws.contents] // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const focusItems = useMemo(
+    () => ws.contents
+      .filter((c) => !doneIds.has(c.stageId))
+      .sort((a, b) => b.priority - a.priority || a.publishDate.localeCompare(b.publishDate) || a.position - b.position),
+    [ws.contents] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const focusItem = focusItems[0] ?? null;
+  const currentStage = focusItem ? ws.stages.find((s) => s.id === focusItem.stageId) ?? null : null;
+  const orderedStages = [...ws.stages].sort((a, b) => a.position - b.position);
+  const stageIndex = currentStage ? orderedStages.findIndex((s) => s.id === currentStage.id) : -1;
+  const nextStage = stageIndex >= 0 ? orderedStages[stageIndex + 1] ?? null : null;
+  const focusLabel = focusItem
+    ? focusItem.publishDate < todayIso() ? "Data vencida" : focusItem.publishDate === todayIso() ? "Para hoje" : PRIORITY_LABEL[focusItem.priority]
+    : "Fila limpa";
+
+  const captureIdea = (event: React.FormEvent) => {
+    event.preventDefault();
+    const title = quickIdea.trim();
+    if (!title) return;
+    onCreate({ title, stageId: orderedStages[0]?.id });
+    setQuickIdea("");
+  };
 
   return (
     <div className="page overview">
+      <section className="focus-hub" aria-labelledby="focus-title">
+        <div className="focus-main">
+          <div className="focus-heading">
+            <div>
+              <p className="eyebrow">AGORA · UMA COISA DE CADA VEZ</p>
+              <h2 id="focus-title">{focusItem ? "Sua próxima ação" : "Tudo sob controle"}</h2>
+            </div>
+            <FocusTimer />
+          </div>
+          {focusItem ? (
+            <>
+              <span className={`focus-reason ${focusItem.publishDate < todayIso() ? "late" : ""}`}>{focusLabel}</span>
+              <button className="focus-content" onClick={() => onOpen(focusItem)}>
+                <strong>{focusItem.title}</strong>
+                <span>{nextAction(currentStage?.name)} · {fmtDay(focusItem.publishDate)}</span>
+              </button>
+              <div className="focus-actions">
+                <button className="primary" onClick={() => onOpen(focusItem)}>Abrir e trabalhar</button>
+                {nextStage && <button onClick={() => onPatch(focusItem.id, { stageId: nextStage.id })}>Avançar para {nextStage.name}</button>}
+              </div>
+            </>
+          ) : (
+            <p className="focus-empty">Não há conteúdo pendente. Capture uma ideia ou planeje a próxima publicação.</p>
+          )}
+        </div>
+        <div className="focus-side">
+          <div>
+            <p className="eyebrow">DEPOIS</p>
+            <div className="focus-queue">
+              {focusItems.slice(1, 4).map((item, index) => (
+                <button key={item.id} onClick={() => onOpen(item)}>
+                  <i>{index + 2}</i><span><b>{item.title}</b><small>{fmtDay(item.publishDate)}</small></span>
+                </button>
+              ))}
+              {focusItems.length <= 1 && <p>Nenhuma outra pendência na fila.</p>}
+            </div>
+          </div>
+          <form className="quick-capture" onSubmit={captureIdea}>
+            <label htmlFor="quick-idea">Estacionar uma ideia</label>
+            <div><input id="quick-idea" value={quickIdea} onChange={(e) => setQuickIdea(e.target.value)} placeholder="Anote sem sair do foco..." /><button aria-label="Abrir nova ideia">+</button></div>
+          </form>
+        </div>
+      </section>
       <section className="hero">
         <div>
           <p className="eyebrow light">PAINEL DE {ws.client.name.toUpperCase()}</p>
@@ -178,6 +244,38 @@ export function Overview({ ws, onOpen, onGo, onCreate }: ViewProps) {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function nextAction(stageName?: string): string {
+  const name = (stageName ?? "").toLowerCase();
+  if (name.includes("ideia")) return "Defina o gancho e o objetivo";
+  if (name.includes("capta") || name.includes("grava")) return "Separe a peça e grave as cenas";
+  if (name.includes("edi") || name.includes("produ")) return "Conclua a edição e a legenda";
+  if (name.includes("revis") || name.includes("aprova")) return "Revise e tome uma decisão";
+  if (name.includes("agenda")) return "Confirme horário e arquivos";
+  return stageName ? `Continue em ${stageName}` : "Abra a ficha e defina o próximo passo";
+}
+
+function FocusTimer() {
+  const total = 25 * 60;
+  const [seconds, setSeconds] = useState(total);
+  const [running, setRunning] = useState(false);
+  useEffect(() => {
+    if (!running || seconds <= 0) return;
+    const timer = window.setInterval(() => setSeconds((value) => {
+      if (value <= 1) { setRunning(false); return 0; }
+      return value - 1;
+    }), 1000);
+    return () => window.clearInterval(timer);
+  }, [running, seconds]);
+  const display = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  return (
+    <div className={`focus-timer ${running ? "running" : ""}`}>
+      <b aria-label={`${Math.floor(seconds / 60)} minutos restantes`}>{display}</b>
+      <button onClick={() => seconds === 0 ? (setSeconds(total), setRunning(true)) : setRunning((value) => !value)}>{seconds === 0 ? "Recomeçar" : running ? "Pausar" : "Focar 25 min"}</button>
+      {seconds < total && seconds > 0 && <button className="timer-reset" onClick={() => { setRunning(false); setSeconds(total); }} aria-label="Reiniciar cronômetro">↺</button>}
     </div>
   );
 }
@@ -364,6 +462,11 @@ export function Board(props: ViewProps) {
                     <JobFlag ws={ws} contentId={item.id} />
                     {item.priority > 0 && <span className={`prio p${item.priority}`}>{PRIORITY_LABEL[item.priority]}</span>}
                   </div>
+                  <button className="card-inspirations" draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
+                    onClick={(e) => { e.stopPropagation(); onOpen(item, "inspiracoes"); }}>
+                    <span>✦</span> Inspirações
+                  </button>
                 </article>
                 </div>
               ))}

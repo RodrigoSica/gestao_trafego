@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiClientError } from "../lib/client-api";
 import { ActivityView, ClientsView, SettingsView } from "./admin";
-import { Editor } from "./editor";
+import { Editor, type EditorTab } from "./editor";
 import type { Client, Content, SessionUser, Workspace } from "./types";
 import { Board, Calendar, Library, Overview, Results, type ViewProps } from "./views";
 import { Avatar, ErrorState, Spinner, Toasts, useToasts, fmtDay } from "./ui";
@@ -28,9 +28,24 @@ export function Studio() {
   const [view, setView] = useState<ViewName>("Visão geral");
   const [search, setSearch] = useState("");
   const [selection, setSelection] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<{ content: Content | null; seed?: Partial<Content> } | null>(null);
+  const [editing, setEditing] = useState<{ content: Content | null; seed?: Partial<Content>; tab?: EditorTab } | null>(null);
   const [palette, setPalette] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+
+  useEffect(() => {
+    setFocusMode(localStorage.getItem("studio-focus") === "true");
+  }, []);
+
+  const toggleFocus = useCallback(() => {
+    setFocusMode((current) => {
+      const next = !current;
+      localStorage.setItem("studio-focus", String(next));
+      return next;
+    });
+    setView("Visão geral");
+    setNavOpen(false);
+  }, []);
 
   /**
    * O tema vive num atributo de `<html>`, aplicado pelo script inline do
@@ -211,10 +226,11 @@ export function Studio() {
       if (typing) return;
       if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key.toLowerCase() === "n" && ws) { e.preventDefault(); setEditing({ content: null }); }
+      if (e.key.toLowerCase() === "f" && ws) { e.preventDefault(); toggleFocus(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ws]);
+  }, [ws, toggleFocus]);
 
   /* ----------------------------------------------------------------- render */
 
@@ -224,7 +240,7 @@ export function Studio() {
 
   const viewProps: ViewProps | null = useMemo(() => (ws ? {
     ws,
-    onOpen: (content: Content) => setEditing({ content }),
+    onOpen: (content: Content, tab?: "inspiracoes") => setEditing({ content, tab }),
     onPatch: patchContent,
     onCreate: (seed?: Partial<Content>) => setEditing({ content: null, seed }),
     onGo: (v: string) => setView(v as ViewName),
@@ -249,7 +265,7 @@ export function Studio() {
 
   return (
     <main
-      className={`shell ${navOpen ? "nav-open" : ""}`}
+      className={`shell ${navOpen ? "nav-open" : ""} ${focusMode ? "focus-mode" : ""}`}
       style={active ? ({ "--brand": active.brandPrimary, "--brand-accent": active.brandAccent } as React.CSSProperties) : undefined}
     >
       <aside className="sidebar">
@@ -287,7 +303,7 @@ export function Studio() {
         <div className="side-note">
           <span>ATALHOS</span>
           <b>Ctrl+K busca tudo</b>
-          <p>“/” foca a busca · “N” cria conteúdo</p>
+          <p>“/” busca · “N” cria · “F” ativa o foco</p>
         </div>
 
         <div className="profile">
@@ -309,6 +325,12 @@ export function Studio() {
             <label className="search">⌕
               <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar conteúdo  (/)" />
             </label>
+            {activeId && (
+              <button className={`focus-toggle ${focusMode ? "active" : ""}`} onClick={toggleFocus}
+                aria-pressed={focusMode} title="Atalho: F">
+                <span>{focusMode ? "✓" : "◎"}</span>{focusMode ? "Sair do foco" : "Modo foco"}
+              </button>
+            )}
             <button className="icon-button theme-toggle" aria-label="Alternar tema" title="Alternar tema"
               onClick={toggleTheme}>
               <span className="on-dark">☀</span><span className="on-light">☾</span>
@@ -381,6 +403,7 @@ export function Studio() {
           ws={activeWs}
           content={editing.content}
           seed={editing.seed}
+          initialTab={editing.tab}
           onClose={() => setEditing(null)}
           onSaved={onSaved}
           onDeleted={onDeleted}
