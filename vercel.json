@@ -1,0 +1,16 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "nextjs",
+  "nodejs": "22",
+  "env": {
+    "NODE_ENV": "production",
+    "DATABASE_PATH": "./.data/studio.db"
+  },
+  "functions": {
+    "api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  }
+}
