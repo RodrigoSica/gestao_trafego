@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { getDb } from "../../../../db";
 import { getSession } from "../../../../lib/auth";
 import { ApiError, ok, route } from "../../../../lib/http";
@@ -19,7 +18,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: Request) {
   return route(async () => {
-    const secret = (env as { PUBLISHING_TOKEN?: string }).PUBLISHING_TOKEN;
+    const secret = process.env.PUBLISHING_TOKEN;
     const presented = request.headers.get("x-publishing-token");
 
     if (secret && presented === secret) {
@@ -34,7 +33,7 @@ export async function POST(request: Request) {
     const url = new URL(request.url);
     const report = await processDueJobs(getDb(), {
       limit: Number(url.searchParams.get("limit") ?? 25) || 25,
-      baseUrl: (env as { PUBLIC_BASE_URL?: string }).PUBLIC_BASE_URL ?? url.origin,
+      baseUrl: process.env.PUBLIC_BASE_URL ?? url.origin,
     });
 
     return ok({ ...report, ranAt: Date.now() });

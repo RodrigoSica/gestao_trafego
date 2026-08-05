@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 
 /**
  * Entrega do aviso de publicação.
@@ -15,11 +14,11 @@ export type DeliveryResult = { ok: true } | { ok: false; error: string };
 const TELEGRAM_API = "https://api.telegram.org";
 
 export function telegramConfigured(): boolean {
-  return Boolean((env as { TELEGRAM_BOT_TOKEN?: string }).TELEGRAM_BOT_TOKEN);
+  return Boolean(process.env.TELEGRAM_BOT_TOKEN);
 }
 
 async function sendTelegram(chatId: string, text: string): Promise<DeliveryResult> {
-  const token = (env as { TELEGRAM_BOT_TOKEN?: string }).TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     return { ok: false, error: "TELEGRAM_BOT_TOKEN não configurado no ambiente." };
   }

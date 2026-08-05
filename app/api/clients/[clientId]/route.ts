@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import {
@@ -8,6 +7,7 @@ import {
 import { assertClientAccess, getSession } from "../../../../lib/auth";
 import { logActivity, toContentDto } from "../../../../lib/data";
 import { forbidden, notFound, ok, parsePartial, readJson, route, v } from "../../../../lib/http";
+import { storageDeletePrefix } from "../../../../lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -100,32 +100,6 @@ export async function PATCH(request: Request, { params }: Ctx) {
   });
 }
 
-/** Fatia do R2 usada na exclusão definitiva. */
-type R2Bucket = {
-  list(options: { prefix: string; cursor?: string }): Promise<{
-    objects: Array<{ key: string }>; truncated: boolean; cursor?: string;
-  }>;
-  delete(keys: string[]): Promise<void>;
-};
-
-/** Remove todos os arquivos do cliente no bucket, em páginas. */
-async function purgeClientMedia(clientId: string): Promise<number> {
-  const bucket = (env as { MEDIA?: R2Bucket }).MEDIA;
-  if (!bucket) return 0;
-
-  let removed = 0;
-  let cursor: string | undefined;
-  do {
-    const page = await bucket.list({ prefix: `${clientId}/`, cursor });
-    if (page.objects.length) {
-      await bucket.delete(page.objects.map((o) => o.key));
-      removed += page.objects.length;
-    }
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
-  return removed;
-}
-
 /**
  * `?mode=archive` (padrão) apenas esconde o cliente e preserva o histórico.
  * `?mode=purge` apaga tudo em definitivo: conteúdos, comentários, métricas,
@@ -163,7 +137,7 @@ export async function DELETE(request: Request, { params }: Ctx) {
 
     // Os arquivos saem primeiro: se o bucket falhar, o registro continua de pé
     // e a operação pode ser repetida. O inverso deixaria lixo órfão no R2.
-    const files = await purgeClientMedia(clientId);
+    const files = await storageDeletePrefix(`${clientId}/`);
 
     for (const table of [comments, metrics, assets, publishJobs, channels, contents,
                          stages, pillars, funnels, memberships, activities]) {

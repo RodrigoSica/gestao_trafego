@@ -37,12 +37,33 @@ const localBindingConfig = {
     : [],
 };
 
+// Vercel (and other Nitro-supported platforms) build with `vite build`
+// directly instead of `vinext build`, and don't have Cloudflare bindings.
+// Vercel sets `VERCEL=1` in its build environment; detect that here so the
+// Cloudflare-specific dev/deploy path stays untouched everywhere else.
+const isVercelBuild = !!process.env.VERCEL;
+
 export default defineConfig(async () => {
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
   process.env.WRANGLER_LOG_PATH ??= ".wrangler/logs";
   process.env.MINIFLARE_REGISTRY_PATH ??= ".wrangler/registry";
+
+  if (isVercelBuild) {
+    const { nitro } = await import("nitro/vite");
+    const { fileURLToPath } = await import("node:url");
+    return {
+      plugins: [vinext(), sites(), nitro()],
+      resolve: {
+        alias: {
+          tailwindcss: fileURLToPath(
+            new URL("./node_modules/tailwindcss/index.css", import.meta.url)
+          ),
+        },
+      },
+    };
+  }
 
   // Wrangler snapshots its log path while the Cloudflare plugin is imported.
   const { cloudflare } = await import("@cloudflare/vite-plugin");

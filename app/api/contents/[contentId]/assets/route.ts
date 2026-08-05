@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../../../../../db";
 import { assets } from "../../../../../db/schema";
@@ -6,16 +5,11 @@ import { assertClientAccess, getSession } from "../../../../../lib/auth";
 import { getContentOrThrow, logActivity } from "../../../../../lib/data";
 import { ApiError, badRequest, notFound, ok, route } from "../../../../../lib/http";
 import { newId } from "../../../../../lib/ids";
+import { storageDelete, storagePut } from "../../../../../lib/storage";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ contentId: string }> };
-
-/** Fatia do binding R2 usada aqui. */
-type R2Bucket = {
-  put(key: string, value: ArrayBuffer, options?: { httpMetadata?: Record<string, string> }): Promise<unknown>;
-  delete(key: string): Promise<void>;
-};
 
 const MAX_BYTES = 45 * 1024 * 1024;
 const KIND_BY_PREFIX: Array<[string, string]> = [
@@ -66,15 +60,6 @@ export async function POST(request: Request, { params }: Ctx) {
     let row;
 
     if (contentType.includes("multipart/form-data")) {
-      const bucket = (env as { MEDIA?: R2Bucket }).MEDIA;
-      if (!bucket) {
-        throw new ApiError(
-          503,
-          "no_storage",
-          "Armazenamento R2 indisponível. Declare `\"r2\": \"MEDIA\"` em .openai/hosting.json."
-        );
-      }
-
       const form = await request.formData();
       const file = form.get("file");
       if (!(file instanceof File)) throw badRequest("Envie um arquivo no campo `file`.");
@@ -85,14 +70,17 @@ export async function POST(request: Request, { params }: Ctx) {
 
       const mime = file.type || "application/octet-stream";
       const key = `${content.clientId}/${contentId}/${newId("ast")}-${safeName(file.name)}`;
-      await bucket.put(key, await file.arrayBuffer(), {
-        httpMetadata: { contentType: mime, cacheControl: "public, max-age=31536000, immutable" },
-      });
+      let uploaded: { url: string | null };
+      try {
+        uploaded = await storagePut(key, await file.arrayBuffer(), mime);
+      } catch (error) {
+        throw new ApiError(503, "no_storage", (error as Error).message);
+      }
 
       row = {
         id: newId("ast"), clientId: content.clientId, contentId,
         name: file.name || "arquivo", kind: kindOf(mime), mime, size: file.size,
-        storageKey: key, url: null, createdBy: session.user.id, createdAt: stamp,
+        storageKey: key, url: uploaded.url, createdBy: session.user.id, createdAt: stamp,
       };
     } else {
       const body = (await request.json().catch(() => null)) as { url?: string; name?: string } | null;
@@ -136,10 +124,9 @@ export async function DELETE(request: Request, { params }: Ctx) {
     if (!row) throw notFound("Anexo não encontrado.");
 
     if (row.storageKey) {
-      const bucket = (env as { MEDIA?: R2Bucket }).MEDIA;
       // O registro sai mesmo se o objeto não puder ser removido: um arquivo
-      // órfão no bucket é menos grave que um anexo fantasma na interface.
-      await bucket?.delete(row.storageKey).catch((error) => console.error("[r2]", error));
+      // órfão no storage é menos grave que um anexo fantasma na interface.
+      await storageDelete(row.storageKey).catch((error) => console.error("[storage]", error));
     }
 
     await db.delete(assets).where(eq(assets.id, assetId));

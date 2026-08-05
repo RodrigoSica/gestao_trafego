@@ -1,14 +1,11 @@
-import { env } from "cloudflare:workers";
+import { sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { DDL } from "../../../db/ddl";
 import { getSession } from "../../../lib/auth";
-import { ok, route, ApiError } from "../../../lib/http";
+import { ok, route } from "../../../lib/http";
 import { countClients, seedForja } from "../../../lib/provision";
 
 export const dynamic = "force-dynamic";
-
-/** Fatia mínima do binding D1 usada aqui — evita depender de @cloudflare/workers-types. */
-type D1Exec = { prepare(query: string): { run(): Promise<unknown> } };
 
 /**
  * Cria/atualiza o esquema e semeia a primeira conta.
@@ -16,12 +13,8 @@ type D1Exec = { prepare(query: string): { run(): Promise<unknown> } };
  */
 export async function POST() {
   return route(async () => {
-    const db = (env as { DB?: D1Exec }).DB;
-    if (!db) throw new ApiError(503, "no_database", "Binding D1 `DB` indisponível neste ambiente.");
-
-    for (const statement of DDL) await db.prepare(statement).run();
-
     const orm = getDb();
+    for (const statement of DDL) await orm.run(sql.raw(statement));
     const session = await getSession();
     const before = await countClients(orm);
     const seeded = before === 0 ? await seedForja(orm, session.user.id) : null;
